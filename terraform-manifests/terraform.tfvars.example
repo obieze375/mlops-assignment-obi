@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and fill in your project ID from the Nebius console.
+# Project shown in screenshots: default-project-eu-north1
+
+region       = "eu-north1"
+project_id   = "project-XXXXXXXXXXXXXXXX"
+subnet_name  = "default-subnet"
+instance_name = "aquamarine-wasp-instance-8"
+
+# Matches the Nebius console selection: NVIDIA L40S AMD, 1 GPU / 16 vCPU / 96 GiB
+gpu_platform = "gpu-l40s-d"
+gpu_preset   = "1gpu-16vcpu-96gb"
+
+# Ubuntu 24.04 LTS for NVIDIA GPUs (CUDA 13), 1280 GiB SSD boot disk
+boot_disk_size_gib       = 1280
+boot_disk_image_family = "ubuntu24.04-cuda13.0"
+
+# SSH username from the Nebius "Username and SSH key" profile (obi@OBI)
+ssh_username = "obi"
+key_name     = "nebius-l40s"
