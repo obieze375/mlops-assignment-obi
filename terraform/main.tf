@@ -1,24 +1,23 @@
-# Single H100 VM for the MLOps assignment (Qwen3-30B-A3B + vLLM).
-# Platform: gpu-h100-sxm, preset: 1gpu-16vcpu-200gb (1× H100 80GB).
+# GPU VM for the MLOps assignment (default: 1× H100 80GB on gpu-h100-sxm).
 
 resource "nebius_compute_v1_disk" "boot" {
-  name           = "${var.vm_name}-boot"
+  name           = "${var.instance_name}-boot"
   parent_id      = var.project_id
   size_gibibytes = var.boot_disk_size_gib
   type           = "NETWORK_SSD"
   source_image_family = {
-    image_family = "ubuntu24.04-cuda13.0"
+    image_family = var.boot_disk_image_family
   }
   block_size_bytes = 4096
 }
 
-resource "nebius_compute_v1_instance" "h100" {
-  name      = var.vm_name
+resource "nebius_compute_v1_instance" "gpu" {
+  name      = var.instance_name
   parent_id = var.project_id
 
   resources = {
-    platform = "gpu-h100-sxm"
-    preset   = "1gpu-16vcpu-200gb"
+    platform = var.gpu_platform
+    preset   = var.gpu_preset
   }
 
   boot_disk = {
@@ -31,6 +30,7 @@ resource "nebius_compute_v1_instance" "h100" {
   cloud_init_user_data = templatefile("${path.module}/cloud-init.yaml.tftpl", {
     ssh_public_key = var.ssh_public_key
     repo_url       = var.repo_url
+    ssh_username   = var.ssh_username
   })
 
   network_interfaces = [
@@ -45,15 +45,27 @@ resource "nebius_compute_v1_instance" "h100" {
   ]
 }
 
+output "region" {
+  value = var.region
+}
+
 output "instance_id" {
-  value = nebius_compute_v1_instance.h100.id
+  value = nebius_compute_v1_instance.gpu.id
+}
+
+output "gpu_platform" {
+  value = var.gpu_platform
+}
+
+output "gpu_preset" {
+  value = var.gpu_preset
 }
 
 output "public_ip" {
   description = "SSH target for the assignment VM."
-  value       = try(nebius_compute_v1_instance.h100.status.network_interfaces[0].public_ip_address.address, "")
+  value       = try(nebius_compute_v1_instance.gpu.status.network_interfaces[0].public_ip_address.address, "")
 }
 
 output "ssh_hint" {
-  value = "ssh ubuntu@${try(nebius_compute_v1_instance.h100.status.network_interfaces[0].public_ip_address.address, "<public-ip>")}"
+  value = "ssh ${var.ssh_username}@${try(nebius_compute_v1_instance.gpu.status.network_interfaces[0].public_ip_address.address, "<public-ip>")}"
 }

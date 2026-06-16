@@ -12,7 +12,7 @@ packages:
   - build-essential
 
 users:
-  - name: ubuntu
+  - name: ${ssh_username}
     groups: docker
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
@@ -30,9 +30,9 @@ runcmd:
   - sysctl --system
   - systemctl enable docker
   - systemctl start docker
-  - usermod -aG docker ubuntu
+  - usermod -aG docker ${ssh_username}
   - curl -LsSf https://astral.sh/uv/install.sh | sh
-  - su - ubuntu -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+  - su - ${ssh_username} -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
 %{ if repo_url != "" ~}
-  - su - ubuntu -c 'git clone ${repo_url} /home/ubuntu/mlops-assignment || true'
+  - su - ${ssh_username} -c 'git clone ${repo_url} /home/${ssh_username}/mlops-assignment || true'
 %{ endif ~}
