@@ -1,5 +1,7 @@
-# Authenticate via Nebius service account env vars (see terraform/README.md).
-# Alternative: use `nebius profile` user auth by omitting service_account block.
+# Option B: authenticate with a Nebius service account (recommended).
+# Before terraform apply, source credentials:
+#   source ~/.nebius/terraform-auth.env
+# (created by ./setup_sa_auth.sh)
 provider "nebius" {
   service_account = {
     private_key_file_env = "AUTHKEY_PRIVATE_PATH"
