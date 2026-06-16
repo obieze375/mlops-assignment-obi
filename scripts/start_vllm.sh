@@ -1,13 +1,21 @@
 #!/usr/bin/env bash
 #
-# Start vLLM with your chosen configuration.
-# Reference: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
+# Start vLLM with tuned configuration for Qwen3-30B-A3B on 1× H100 80GB.
+# Workload: ~1.5-3K token prompts, short structured SQL/JSON outputs,
+# ~2-3 dependent LLM calls per agent request.
 
 set -euo pipefail
 
-MODEL="Qwen/Qwen3-30B-A3B-Instruct-2507"
+MODEL="${VLLM_MODEL:-Qwen/Qwen3-30B-A3B-Instruct-2507}"
 
 exec uv run python -m vllm.entrypoints.openai.api_server \
     --model "$MODEL" \
     --host 0.0.0.0 \
-    --port 8000
+    --port 8000 \
+    --dtype auto \
+    --max-model-len 8192 \
+    --gpu-memory-utilization 0.92 \
+    --max-num-seqs 64 \
+    --max-num-batched-tokens 8192 \
+    --enable-prefix-caching \
+    --disable-log-requests

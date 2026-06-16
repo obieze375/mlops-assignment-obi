@@ -58,19 +58,111 @@ def matches(gold_rows: list[tuple] | None, pred_rows: list[tuple] | None) -> boo
 
 def eval_one(question: dict, agent_url: str) -> dict:
     """Score one question. Return a dict capturing per-iteration correctness."""
-    raise NotImplementedError("Phase 5")
+    db_id = question["db_id"]
+    gold_sql = question["gold_sql"]
+
+    ok_gold, gold_rows, gold_err = run_sql(db_id, gold_sql)
+    if not ok_gold:
+        return {
+            "question": question["question"],
+            "db_id": db_id,
+            "gold_sql": gold_sql,
+            "error": f"gold SQL failed: {gold_err}",
+            "agent_sql": None,
+            "iterations": 0,
+            "final_correct": False,
+            "per_iteration": [],
+        }
+
+    try:
+        with httpx.Client(timeout=120.0) as client:
+            resp = client.post(agent_url, json={
+                "question": question["question"],
+                "db": db_id,
+                "tags": {"eval": "true", "db_id": db_id},
+            })
+            resp.raise_for_status()
+            payload = resp.json()
+    except Exception as e:  # noqa: BLE001
+        return {
+            "question": question["question"],
+            "db_id": db_id,
+            "gold_sql": gold_sql,
+            "error": f"agent call failed: {type(e).__name__}: {e}",
+            "agent_sql": None,
+            "iterations": 0,
+            "final_correct": False,
+            "per_iteration": [],
+        }
+
+    history = payload.get("history", [])
+    sql_by_iter: list[str] = []
+    for entry in history:
+        if entry.get("node") in {"generate_sql", "revise"} and entry.get("sql"):
+            sql_by_iter.append(entry["sql"])
+
+    final_sql = payload.get("sql", "")
+    if not sql_by_iter and final_sql:
+        sql_by_iter = [final_sql]
+
+    per_iteration: list[dict] = []
+    last_correct = False
+    for i, sql in enumerate(sql_by_iter):
+        ok_pred, pred_rows, pred_err = run_sql(db_id, sql)
+        correct = matches(gold_rows, pred_rows) if ok_pred else False
+        last_correct = correct
+        per_iteration.append({
+            "iteration": i,
+            "sql": sql,
+            "correct": correct,
+            "error": pred_err,
+        })
+
+    return {
+        "question": question["question"],
+        "db_id": db_id,
+        "gold_sql": gold_sql,
+        "agent_sql": final_sql,
+        "iterations": payload.get("iterations", len(sql_by_iter)),
+        "final_correct": last_correct,
+        "per_iteration": per_iteration,
+        "agent_ok": payload.get("ok", False),
+        "agent_error": payload.get("error"),
+        "history": history,
+    }
 
 
 def summarize(results: list[dict]) -> dict:
-    """Aggregate per-question results.
+    """Aggregate per-question results with per-iteration carry-forward."""
+    n = len(results)
+    if n == 0:
+        return {
+            "total": 0,
+            "overall_pass_rate": 0.0,
+            "per_iteration_pass_rate": {},
+        }
 
-    Per-iteration carry-forward: if the agent terminated at iteration j < k
-    (verify said ok at j, or it hit MAX_ITERATIONS at j < k), treat the
-    question's iteration-k result as identical to its iteration-j result.
-    The agent stopped emitting; whatever it had at termination is what
-    would have been served had we polled at iteration k.
-    """
-    raise NotImplementedError("Phase 5")
+    max_iters = max((len(r.get("per_iteration", [])) for r in results), default=0)
+    per_iter_rates: dict[str, float] = {}
+
+    for k in range(max_iters):
+        correct = 0
+        for r in results:
+            per = r.get("per_iteration", [])
+            if not per:
+                continue
+            idx = min(k, len(per) - 1)
+            if per[idx]["correct"]:
+                correct += 1
+        per_iter_rates[str(k)] = correct / n
+
+    final_correct = sum(1 for r in results if r.get("final_correct"))
+    return {
+        "total": n,
+        "overall_pass_rate": final_correct / n,
+        "per_iteration_pass_rate": per_iter_rates,
+        "errors": sum(1 for r in results if r.get("error")),
+    }
 
 
 # ---------- Main (provided) --------------------------------------------

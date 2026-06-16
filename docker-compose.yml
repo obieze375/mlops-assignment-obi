@@ -9,31 +9,32 @@
 # your laptop see localhost:8000 -> vLLM, localhost:3000 -> Grafana, etc.
 
 x-langfuse-env: &langfuse-env
-  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/postgres
+  # Route via host-published ports so the stack works when bridge ICC is restricted.
+  DATABASE_URL: postgresql://postgres:postgres@host.docker.internal:5432/postgres
   SALT: course-salt-not-for-prod
   ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
   TELEMETRY_ENABLED: "false"
   LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
-  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
-  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_MIGRATION_URL: clickhouse://host.docker.internal:9000
+  CLICKHOUSE_URL: http://host.docker.internal:8123
   CLICKHOUSE_USER: clickhouse
   CLICKHOUSE_PASSWORD: clickhouse
   CLICKHOUSE_CLUSTER_ENABLED: "false"
-  REDIS_HOST: redis
+  REDIS_HOST: host.docker.internal
   REDIS_PORT: "6379"
   REDIS_AUTH: course-redis
   LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
   LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
   LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: miniosecret
-  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://host.docker.internal:9002
   LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
   LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
   LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
   LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
   LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: miniosecret
-  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://host.docker.internal:9002
   LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
   LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
 
@@ -61,12 +62,16 @@ services:
     volumes:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - prometheus
 
   postgres:
     image: postgres:16
     restart: always
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -82,6 +87,9 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.10
     restart: always
+    ports:
+      - "8123:8123"
+      - "9000:9000"
     environment:
       CLICKHOUSE_USER: clickhouse
       CLICKHOUSE_PASSWORD: clickhouse
@@ -98,6 +106,8 @@ services:
   redis:
     image: redis:7
     restart: always
+    ports:
+      - "6379:6379"
     command: ["redis-server", "--requirepass", "course-redis"]
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "course-redis", "ping"]
@@ -108,6 +118,9 @@ services:
   minio:
     image: minio/minio
     restart: always
+    ports:
+      - "9002:9000"
+      - "9003:9001"
     command: server /data --address ":9000" --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minio
@@ -125,9 +138,11 @@ services:
     depends_on:
       minio:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 minio miniosecret;
+      mc alias set local http://host.docker.internal:9002 minio miniosecret;
       mc mb --ignore-existing local/langfuse;
       exit 0;
       "
@@ -144,6 +159,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       <<: *langfuse-env
 
@@ -155,12 +172,21 @@ services:
         condition: service_started
     ports:
       - "3001:3000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       <<: *langfuse-env
       NEXTAUTH_URL: http://localhost:3001
       NEXTAUTH_SECRET: course-nextauth-not-for-prod
+      LANGFUSE_INIT_ORG_ID: course-org
       LANGFUSE_INIT_ORG_NAME: Course
+      LANGFUSE_INIT_PROJECT_ID: default-project
       LANGFUSE_INIT_PROJECT_NAME: Default
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-course-assignment
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-course-assignment
+      LANGFUSE_INIT_USER_EMAIL: course@langfuse.local
+      LANGFUSE_INIT_USER_NAME: Course User
+      LANGFUSE_INIT_USER_PASSWORD: course-password
 
 volumes:
   prometheus-data:
