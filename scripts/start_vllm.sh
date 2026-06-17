@@ -8,6 +8,15 @@ set -euo pipefail
 
 MODEL="${VLLM_MODEL:-Qwen/Qwen3-30B-A3B-Instruct-2507}"
 
+# Load HF_TOKEN from .env if present (repo root)
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "${ROOT}/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "${ROOT}/.env"
+  set +a
+fi
+
 exec uv run python -m vllm.entrypoints.openai.api_server \
     --model "$MODEL" \
     --host 0.0.0.0 \
@@ -17,5 +26,4 @@ exec uv run python -m vllm.entrypoints.openai.api_server \
     --gpu-memory-utilization 0.92 \
     --max-num-seqs 64 \
     --max-num-batched-tokens 8192 \
-    --enable-prefix-caching \
-    --disable-log-requests
+    --enable-prefix-caching
