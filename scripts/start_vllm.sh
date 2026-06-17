@@ -6,6 +6,12 @@
 
 set -euo pipefail
 
+if ! compgen -G "/usr/include/python3.*/Python.h" > /dev/null; then
+  echo "ERROR: Python.h not found. vLLM torch.compile needs python3-dev:"
+  echo "  sudo apt-get update && sudo apt-get install -y python3-dev build-essential"
+  exit 1
+fi
+
 MODEL="${VLLM_MODEL:-Qwen/Qwen3-30B-A3B-Instruct-2507}"
 
 # Load HF_TOKEN from .env if present (repo root)
