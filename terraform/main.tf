@@ -62,10 +62,10 @@ output "gpu_preset" {
 }
 
 output "public_ip" {
-  description = "SSH target for the assignment VM."
-  value       = try(nebius_compute_v1_instance.gpu.status.network_interfaces[0].public_ip_address.address, "")
+  description = "SSH target for the assignment VM (bare IP, no CIDR suffix)."
+  value       = split("/", try(nebius_compute_v1_instance.gpu.status.network_interfaces[0].public_ip_address.address, ""))[0]
 }
 
 output "ssh_hint" {
-  value = "ssh ${var.ssh_username}@${try(nebius_compute_v1_instance.gpu.status.network_interfaces[0].public_ip_address.address, "<public-ip>")}"
+  value = "ssh ${var.ssh_username}@${split("/", try(nebius_compute_v1_instance.gpu.status.network_interfaces[0].public_ip_address.address, "<public-ip>"))[0]}"
 }
