@@ -23,9 +23,12 @@ from agent.graph import AgentState, graph  # noqa: E402
 # are NOT swallowed - a misconfigured Langfuse should not silently
 # produce zero traces.
 _lf_handler: Any = None
+_langfuse_client: Any = None
 if os.environ.get("LANGFUSE_PUBLIC_KEY") and os.environ.get("LANGFUSE_SECRET_KEY"):
+    from langfuse import get_client
     from langfuse.langchain import CallbackHandler
 
+    _langfuse_client = get_client()
     _lf_handler = CallbackHandler()
 
 
@@ -47,9 +50,25 @@ class AnswerResponse(BaseModel):
     history: list[dict[str, Any]] = []
 
 
+@app.on_event("startup")
+def _startup() -> None:
+    if _lf_handler is None:
+        print("Langfuse: disabled (set LANGFUSE_PUBLIC_KEY + LANGFUSE_SECRET_KEY in .env)")
+        return
+    host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    pk = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+    print(f"Langfuse: enabled host={host} public_key={pk[:12]}...")
+    if _langfuse_client is not None:
+        try:
+            ok = _langfuse_client.auth_check()
+            print(f"Langfuse: auth_check={ok}")
+        except Exception as e:  # noqa: BLE001
+            print(f"Langfuse: auth_check failed: {e}")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "langfuse": "enabled" if _lf_handler else "disabled"}
 
 
 @app.post("/answer", response_model=AnswerResponse)
@@ -67,6 +86,9 @@ def answer(req: AnswerRequest) -> AnswerResponse:
         final = graph.invoke(state, config=config)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}")
+    finally:
+        if _langfuse_client is not None:
+            _langfuse_client.flush()
 
     sql = final.get("sql", "")
     iteration = final.get("iteration", 0)
